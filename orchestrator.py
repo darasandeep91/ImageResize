@@ -1,20 +1,19 @@
 import asyncio
+import random
 
 from Job import Job
-from consumer import consumer
-from producer import submit_job
 from ResizeEnum import Resize
-from enum import Enum
-import random
+from producer import submit_job
 
 
 async def orchestrator():
-    queue = asyncio.Queue()
-    jobs = create_mock_jobs(10)
+    queue = asyncio.Queue(maxsize=2)
+    jobs = create_mock_jobs(3)
 
-    producer_task = submit_job(jobs, queue)
-    consumer_task = asyncio.create_task(consumer(queue))
-    await asyncio.gather(producer_task, consumer_task)
+    # producer_task = submit_job(jobs, queue)
+    # consumer_task = consumer(queue)
+    # await asyncio.gather(producer_task, consumer_task)
+    res = await asyncio.create_task(submit_job(jobs, queue))
 
 
 def create_mock_jobs(num_jobs):
