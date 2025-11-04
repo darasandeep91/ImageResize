@@ -2,3 +2,4 @@
 appengine-generated/
 .venv
 .idea/
+/ResizedImages/
