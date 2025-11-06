@@ -1,38 +1,24 @@
 import asyncio
-import random
 
-from Job import Job
-from ResizeEnum import Resize
-from producer import submit_job
+from consumer import consume_images_for_processing
+from downloader import download_images
+from urlProducer import producer_urls
 
 
 async def orchestrator():
-    queue = asyncio.Queue(maxsize=2)
-    jobs = create_mock_jobs(3)
-
-    # producer_task = submit_job(jobs, queue)
-    # consumer_task = consumer(queue)
-    # await asyncio.gather(producer_task, consumer_task)
-    res = await asyncio.create_task(submit_job(jobs, queue))
+    total_number_of_images_to_process = 10
+    time_out_for_stage = 15
+    queue_in = asyncio.Queue(maxsize=5)
+    queue_out = asyncio.Queue(maxsize=5)
 
 
-def create_mock_jobs(num_jobs):
-    jobs = []
-    possible_resizes = list(Resize)
-    base_url = "https://place.dog/300/200"
-    base_file_name = "Dog"
+    url_producer_task = producer_urls(total_number_of_images_to_process, queue_in)
+    producer_task = download_images(queue_in, queue_out, time_out_for_stage)
+    consumer_task = consume_images_for_processing(queue_out, time_out_for_stage)
+    await asyncio.gather(url_producer_task, producer_task, consumer_task)
 
-    for i in range(1, num_jobs + 1):
-        file_name = f"{base_file_name}{i}.jpeg"
-        resize_choice = random.choice(possible_resizes)
-        job = Job(
-            imageURL=base_url,
-            fileName=file_name,
-            resize=resize_choice
-        )
-        jobs.append(job)
-
-    return jobs
+    # res = await asyncio.create_task(producer_urls(total_number_of_images_to_process, queue_in))
+    # print(res)
 
 
 if __name__ == "__main__":

@@ -1,27 +1,31 @@
 import asyncio
 import random
-from typing import List
 
 import aiohttp
 
-import Job
+MAX_RETRIES_FOR_FAILED_REQUEST = 10
+MAX_DOWNLOAD_TASKS = 2
 
-MAX_RETRIES = 10
+async def download_images(queue_in: asyncio.Queue, queue_out: asyncio.Queue, time_out_for_stage: float):
+    semaphores = asyncio.Semaphore(MAX_DOWNLOAD_TASKS)
+    while True:
+        async with semaphores:
+            try:
+                job = await asyncio.wait_for(queue_in.get(), time_out_for_stage)
+            except asyncio.TimeoutError:
+                print(f"Timeout reached {time_out_for_stage} secs, no messages received. Shutting down downloader.")
+                break
 
+            print(f"downloading image: {job.imageURL} related to job: {job.fileName}")
+            fetch_image_job_obj = lambda: fetch_image_from_url(job.imageURL)
+            downloaded_image_content = await retry_with_jitter(fetch_image_job_obj)
+            job.downloadedImage = downloaded_image_content
 
-async def submit_job(input_job_lst: List[Job], queue: asyncio.Queue):
-    for job in input_job_lst:
-        imageURL = job.imageURL
-        print(f"downloading image: {imageURL} related to job: {job.fileName}")
-        fetch_image_obj = lambda: fetch_image(imageURL)
-        downloaded_image_content = await retry_with_jitter(fetch_image_obj)
-        print(f"downloaded image size {len(downloaded_image_content)}")
-        job.downloadedImage = downloaded_image_content
-        queue.put_nowait(job)
+            await queue_out.put(job)
 
-
-async def fetch_image(url: str):
-    async with aiohttp.ClientSession() as session:
+async def fetch_image_from_url(url: str):
+    timeout = aiohttp.ClientTimeout(total=2)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
         async with session.get(url) as response:
             print(response)
             if validate_response(response):
@@ -33,14 +37,14 @@ async def retry_with_jitter(coroutine_callable):
     result = None
     retry_counter = 0
     base_sleep = 1
-    while retry_counter < MAX_RETRIES:
+    while retry_counter < MAX_RETRIES_FOR_FAILED_REQUEST:
         try:
             result = await coroutine_callable()
             if result is not None:
                 return result
 
         except Exception as ex:
-            if base_sleep > MAX_RETRIES:
+            if base_sleep > MAX_RETRIES_FOR_FAILED_REQUEST:
                 print(f"retries exhausted")
                 return None
             sleep_time = (base_sleep * (2 ** retry_counter)) + random.uniform(0, 1)

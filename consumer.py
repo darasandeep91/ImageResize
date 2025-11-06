@@ -1,22 +1,23 @@
 import asyncio
+import io
 import os.path
 
 from PIL import Image
 
 from Job import Job
-import io
 
 
-async def consumer(queue: asyncio.Queue):
+async def consume_images_for_processing(queue: asyncio.Queue, time_out_for_stage: float):
     while True:
-        print("......................waiting for job......................")
-        if not queue.empty():
-            job = await queue.get()
-            print(f"......................processing job {job.fileName}......................")
-            await asyncio.to_thread(process_image, job)
-        else:
-            print("no job found sleeping for 2 seconds")
-            await asyncio.sleep(1)
+        try:
+            job = await asyncio.wait_for(queue.get(), timeout=time_out_for_stage)
+        except asyncio.TimeoutError:
+            print(f"Timeout reached {time_out_for_stage} secs, no messages received. Shutting down consumer.")
+            break
+
+        print(f"Processing job {job.fileName}")
+        await asyncio.to_thread(process_image, job)
+        queue.task_done()
 
 
 def process_image(job: Job):
